@@ -5,6 +5,10 @@ exports.findNeighbours = function (from, key, json) {
   const isStart = (feature) => feature.properties[key] === from;
 
   const startingPoint = json.features.find(isStart);
+  if (!startingPoint) {
+    throw new Error(`Could not find a feature with ${key}: ${from}`);
+  }
+  // Keep a list of features we've already visited
   const visited = [startingPoint];
 
   // Finds all features that are connected to the current one
@@ -31,14 +35,24 @@ exports.findNeighbours = function (from, key, json) {
     }).filter(Boolean);
   }
 
-  const neighbours = [];
+  const neighbours = []; // the list of results
+  // The queue contains higher level representation of the features that need to be processed
+  // additional information for instance include the length traveled so far
   const queue = [...connectedTo(startingPoint, length(startingPoint) / 2)];
-  while (queue.length > 0) {
+  while (queue.length > 0 && queue.length < 10) {
     const next = queue.shift();
     if (isDestination(next.feature)) {
-      neighbours.push({ [key]: next.feature.properties[key], distance: next.distance + (length(next.feature) / 2) });
+      neighbours.push({
+        [key]: next.feature.properties[key],
+        distance: Math.round(next.distance + (length(next.feature) / 2)),
+      });
     } else {
-      queue.push(...connectedTo(next.feature, length(next.feature) + next.distance));
+      const connections = connectedTo(next.feature, length(next.feature) + next.distance);
+      queue.push(...connections);
+      // Also store these connections inside the visited array because when there is
+      // an intersection and we look at connections of the firs element in the queue
+      // we don't want to push the same connection again if it's already queued
+      visited.push(...connections.map((conn) => conn.feature));
     }
   }
   return neighbours;
@@ -47,5 +61,5 @@ exports.findNeighbours = function (from, key, json) {
 
 // Return the length of the feature in meters
 function length(feature) {
-  return Math.round(turfLength(feature, { units: 'kilometers' }) * 1000);
+  return turfLength(feature, { units: 'kilometers' }) * 1000;
 }
